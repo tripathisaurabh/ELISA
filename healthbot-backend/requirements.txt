@@ -1,0 +1,18 @@
+fastapi
+uvicorn
+python-multipart
+openai
+pillow
+opencv-python
+pytesseract
+python-dotenv
+fastapi
+uvicorn
+python-multipart
+openai
+pillow
+opencv-python
+pytesseract
+python-dotenv
+sqlalchemy
+psycopg2-binary    # for PostgreSQL, or comment out if using SQLite

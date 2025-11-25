@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Doctor View – HealthSnap AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="doctor.js"></script>
+</head>
+
+<body class="bg-gray-100">
+
+  <div class="max-w-5xl mx-auto p-6">
+
+    <h1 class="text-4xl font-bold text-center mb-6">Doctor Dashboard</h1>
+
+    <!-- Patient Info -->
+    <div id="patientInfo" class="bg-white shadow p-5 rounded-lg mb-6"></div>
+
+    <!-- Reports -->
+    <h2 class="text-2xl font-semibold mb-3">Patient Reports</h2>
+    <div id="reportsContainer" class="space-y-4 mb-10"></div>
+
+    <!-- Doctor Chatbot -->
+    <div class="bg-white shadow p-6 rounded-lg">
+      <h3 class="text-xl font-bold mb-3">AI Patient Assistant</h3>
+
+      <textarea id="doctorQuestion"
+        class="w-full border p-3 rounded mb-4"
+        placeholder="Ask about history, medications, allergies, etc..."
+      ></textarea>
+
+      <button onclick="askDoctorBot()"
+        class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+        Ask AI
+      </button>
+
+      <div id="chatResult" class="mt-5"></div>
+    </div>
+
+  </div>
+
+</body>
+</html>
