@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+SQLAlchemy
+pydantic
+openai
+PyMuPDF
+qrcode
+passlib[bcrypt]
+pip install -r requirements.txt
