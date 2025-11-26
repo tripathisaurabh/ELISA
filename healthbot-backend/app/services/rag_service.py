@@ -1,14 +1,13 @@
-from app.core.supabase_clients import supabase_auth, supabase_db
+from app.core.supabase_clients import supabase_db
 from app.core.openai_client import ask_gpt
 from app.services.share_service import validate_share_session
-from app.core.supabase_clients import supabase_auth, supabase_db
 
 
 def rag_chat(share_id: str, question: str):
     """
     RAG Chat handler used when a doctor opens a shared report link.
     Validates share session, fetches report text, builds a grounded prompt,
-    and queries the GPT assistant.
+    and queries the GPT assistant. Also saves the Q/A in chat history.
     """
 
     # 1️⃣ Validate sharing session expiry (15 min validity)
@@ -17,6 +16,8 @@ def rag_chat(share_id: str, question: str):
         raise ValueError("Invalid or expired share session")
 
     report_id = session["report_id"]
+    doctor_id = session["doctor_id"]
+    patient_id = session["patient_id"]
 
     # 2️⃣ Fetch the report text from Supabase
     res = (
@@ -33,9 +34,6 @@ def rag_chat(share_id: str, question: str):
 
     text_content = res.data.get("text_content") or ""
 
-    # If text is too long, you can trim (OPTIONAL)
-    # text_content = text_content[:15000]
-
     # 3️⃣ Construct safe medical RAG prompt
     prompt = (
         "You are assisting a doctor by reading a patient's medical report.\n\n"
@@ -51,13 +49,31 @@ def rag_chat(share_id: str, question: str):
     )
 
     # 4️⃣ Query the GPT model
-    response = ask_gpt(prompt)
+    answer = ask_gpt(prompt)
 
-    return response
+    # 5️⃣ Save chat history for this share session
+    try:
+        supabase_db.table("doctor_chat_history").insert({
+            "share_id": share_id,
+            "doctor_id": doctor_id,
+            "patient_id": patient_id,
+            "report_id": report_id,
+            "question": question,
+            "answer": answer,
+        }).execute()
+    except Exception as e:
+        # Don't break the chat if logging fails – just log server-side
+        print("Chat history insert failed:", e)
+
+    return answer
 
 
-from app.core.supabase_clients import supabase_auth, supabase_db
+# ==============================
+# (Optional) Advanced RAG helpers
+# ==============================
+
 from app.core.openai_client import ask_gpt
+
 
 def get_latest_summary_for_chat(session):
     batch_ids = session["batch_ids"]  # array of batch ids allowed
@@ -65,7 +81,7 @@ def get_latest_summary_for_chat(session):
 
     # Fetch latest batch
     res = (
-        supabase
+        supabase_db
         .table("report_batches")
         .select("*")
         .in_("id", batch_ids)
@@ -96,13 +112,7 @@ def generate_opening_message(summary):
 
     Output: A concise natural-language explanation.
     """
-
     return ask_gpt(prompt)
-
-
-
-from app.core.supabase_clients import supabase_auth, supabase_db
-from app.core.openai_client import ask_gpt
 
 
 def answer_doctor_query(session, question):
@@ -128,7 +138,13 @@ def answer_doctor_query(session, question):
 
     # Step 2: structured_json from individual files
     batch_id = summary["batch_id"]
-    res = supabase.table("structured_json").select("json").eq("batch_id", batch_id).execute()
+    res = (
+        supabase_db
+        .table("structured_json")
+        .select("json")
+        .eq("batch_id", batch_id)
+        .execute()
+    )
 
     structured = [item["json"] for item in res.data]
 
@@ -146,7 +162,13 @@ def answer_doctor_query(session, question):
         return r2
 
     # Step 3: fallback OCR text
-    text_res = supabase.table("reports").select("text_content").eq("batch_id", batch_id).execute()
+    text_res = (
+        supabase_db
+        .table("reports")
+        .select("text_content")
+        .eq("batch_id", batch_id)
+        .execute()
+    )
     texts = [t["text_content"] for t in text_res.data]
 
     ocr_prompt = f"""
