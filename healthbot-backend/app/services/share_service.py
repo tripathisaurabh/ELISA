@@ -1,50 +1,59 @@
 # app/services/share_service.py
 from datetime import datetime, timedelta
-from app.core.supabase_clients import supabase_db
+from app.core.supabase_client import supabase_db
 
 
-def create_share_session(report_id: str, patient_id: str, doctor_id: str, minutes: int = 15):
-    """
-    Create a share session for a report, valid for `minutes`.
-    """
-    expires = datetime.utcnow() + timedelta(minutes=minutes)
+import uuid
+from datetime import datetime, timedelta
+from app.core.supabase_client import supabase_db
+
+def create_share_session(patient_id: str, doctor_id: str, minutes: int = 15):
+    """Create a share session valid for X minutes."""
+
+    share_id = str(uuid.uuid4())
+    expires_at = datetime.utcnow() + timedelta(minutes=minutes)
 
     payload = {
-        "report_id": report_id,
+        "id": share_id,
         "patient_id": patient_id,
         "doctor_id": doctor_id,
-        "expires_at": expires.isoformat(),
-        "is_active": True,
+        "expires_at": expires_at.isoformat(),
     }
 
-    res = supabase_db.table("share_sessions").insert(payload).execute()
+    supabase_db.table("share_sessions").insert(payload).execute()
 
-    if not res.data:
-        raise ValueError("Failed to create share session")
-
-    return res.data[0]
-
+    return payload
 
 def validate_share_session(share_id: str):
-    """
-    Validate that a share session exists, is active, and not expired.
-    """
-    res = supabase_db.table("share_sessions").select("*").eq("id", share_id).execute()
+    """Return session only if it is still valid."""
 
-    if not res.data:
+    result = (
+        supabase_db.table("share_sessions")
+        .select("*")
+        .eq("id", share_id)
+        .single()
+        .execute()
+    )
+
+    session = result.data
+    if not session:
         return None
 
-    session = res.data[0]
+    from datetime import datetime, timezone
 
-    if not session.get("is_active", False):
-        return None
-
-    # expiry check
-    expires_at = datetime.fromisoformat(session["expires_at"]).replace(tzinfo=None)
-    now = datetime.utcnow()
+    # Ensure both are timezone-aware UTC
+    expires_at = datetime.fromisoformat(session["expires_at"])
+    now = datetime.now(timezone.utc)
 
     if expires_at < now:
-        supabase_db.table("share_sessions").update({"is_active": False}).eq("id", share_id).execute()
         return None
 
+
     return session
+def get_share_patient_summary(session):
+    """
+    Wrapper function that extracts patient summary
+    using the existing RAG summary utility.
+    """
+    from app.services.rag_service import get_latest_summary_for_chat
+    return get_latest_summary_for_chat(session)

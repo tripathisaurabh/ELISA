@@ -37,7 +37,7 @@ def root():
 # ----------------------------
 @app.get("/test/supabase")
 def test_supabase():
-    from app.core.supabase_clients import supabase_auth, supabase_db
+    from app.core.supabase_client import supabase_auth, supabase_db
     res = supabase.table("reports").select("*").limit(1).execute()
     return {"success": True, "data": res.data}
 
@@ -54,7 +54,7 @@ def debug_role():
     If everything is correct, you should see:  "service_role"
     If you see "anon" or null, RLS errors are expected.
     """
-    from app.core.supabase_clients import supabase_auth, supabase_db
+    from app.core.supabase_client import supabase_auth, supabase_db
     res = supabase.rpc("auth_role").execute()
     return {"data": res.data}
 

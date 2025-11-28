@@ -8,7 +8,7 @@ from fastapi import UploadFile
 from io import BytesIO
 from pdf2image import convert_from_bytes
 
-from app.core.supabase_clients import supabase_db
+from app.core.supabase_client import supabase_db
 from app.core.openai_client import ask_gpt, client
 
 

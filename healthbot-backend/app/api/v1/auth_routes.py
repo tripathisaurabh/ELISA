@@ -1,37 +1,43 @@
-from fastapi import APIRouter, HTTPException
 from uuid import uuid4
+from fastapi import APIRouter, HTTPException
 from app.schemas.auth_schemas import RegisterRequest, LoginRequest
-from app.core.supabase_clients import supabase_auth, supabase_db
+from app.core.supabase_client import supabase_auth, supabase_db
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-# ----------------------------------------
+# --------------------------------------------------------
 # REGISTER
-# ----------------------------------------
-
+# --------------------------------------------------------
 @router.post("/register")
 def register_user(payload: RegisterRequest):
 
     # 1️⃣ Create user in Supabase Auth
-    response = supabase_auth.auth.sign_up({
-        "email": payload.email,
-        "password": payload.password,
-        "data": {
-            "name": payload.name,
-            "role": payload.role,
-        }
-    })
+    try:
+        response = supabase_auth.auth.sign_up({
+            "email": payload.email,
+            "password": payload.password,
+            "data": {
+                "name": payload.name,
+                "role": payload.role
+            }
+        })
+    except Exception as e:
+        raise HTTPException(400, f"Supabase signup failed: {str(e)}")
 
     user = response.user
     if not user:
-        raise HTTPException(400, f"Signup failed: {response}")
+        raise HTTPException(400, "Signup failed")
 
-    # 2️⃣ If role = PATIENT → create patient record
+    # --------------------------------------------------------
+    # PATIENT FLOW  ✅ ONLY PATIENT ID USED
+    # --------------------------------------------------------
     if payload.role == "patient":
+        patient_id = str(uuid4())
+
         try:
             supabase_db.table("patients").insert({
-                "id": str(uuid4()),
+                "id": patient_id,         # REAL patient ID we use everywhere
                 "name": payload.name,
                 "email": payload.email,
                 "phone": payload.phone,
@@ -39,78 +45,105 @@ def register_user(payload: RegisterRequest):
                 "gender": payload.gender,
             }).execute()
         except Exception as e:
-            raise HTTPException(400, f"Patient DB insert failed: {e}")
+            raise HTTPException(400, f"Patient DB insert failed: {str(e)}")
 
         return {
             "message": "User + Patient created",
-            "auth_user_id": user.id,
+            "patient_id": patient_id,    # FRONTEND WILL USE THIS ONLY
             "role": "patient"
         }
 
-    # 3️⃣ If role = DOCTOR → create doctor record
-    elif payload.role == "doctor":
-
-        # Validate doctor-specific fields
-        if not payload.speciality or not payload.clinic_name or not payload.experience:
-            raise HTTPException(
-                400,
-                "Doctor registration requires: speciality, clinic_name, experience"
-            )
+    # --------------------------------------------------------
+    # DOCTOR FLOW
+    # --------------------------------------------------------
+    if payload.role == "doctor":
+        doctor_id = str(uuid4())
 
         try:
             supabase_db.table("doctors").insert({
-                "id": str(uuid4()),
+                "id": doctor_id,        # REAL doctor ID used everywhere
                 "name": payload.name,
                 "email": payload.email,
-                "phone": payload.phone,
                 "speciality": payload.speciality,
                 "clinic_name": payload.clinic_name,
                 "experience": payload.experience,
             }).execute()
         except Exception as e:
-            raise HTTPException(400, f"Doctor DB insert failed: {e}")
+            raise HTTPException(400, f"Doctor DB insert failed: {str(e)}")
 
         return {
             "message": "User + Doctor created",
-            "auth_user_id": user.id,
+            "doctor_id": doctor_id,
             "role": "doctor"
         }
 
-    # 4️⃣ Invalid role
-    else:
-        raise HTTPException(400, "Invalid role. Must be 'patient' or 'doctor'.")
+    raise HTTPException(400, f"Unknown role: {payload.role}")
 
+
+# --------------------------------------------------------
+# LOGIN
+# --------------------------------------------------------
 @router.post("/login")
 def login_user(payload: LoginRequest):
 
-    result = supabase_auth.auth.sign_in_with_password({
-        "email": payload.email,
-        "password": payload.password
-    })
+    # 1️⃣ Login with Supabase Auth
+    try:
+        auth_res = supabase_auth.auth.sign_in_with_password({
+            "email": payload.email,
+            "password": payload.password,
+        })
+    except Exception as e:
+        raise HTTPException(400, f"Login failed: {str(e)}")
 
-    user = result.user
-    session = result.session
+    user = auth_res.user
+    session = auth_res.session
+    if not user:
+        raise HTTPException(400, "Invalid credentials")
 
-    role = user.user_metadata.get("role")
-    profile = None
+    # Role from metadata
+    role = (user.user_metadata or {}).get("role")
 
+    patient_id = None
+    doctor_id = None
+
+    # --------------------------------------------------------
+    # PATIENT LOGIN → GET patient_id BY EMAIL (NOT BY auth ID)
+    # --------------------------------------------------------
     if role == "patient":
-        profile = supabase_db.table("patients").select("*").eq("email", user.email).single().execute()
+        try:
+            res = (
+                supabase_db.table("patients")
+                .select("id")
+                .eq("email", user.email)      # FETCH BY EMAIL ONLY
+                .single()
+                .execute()
+            )
+            patient_id = res.data["id"]
+        except:
+            patient_id = None
 
-    elif role == "doctor":
-        profile = supabase_db.table("doctors").select("*").eq("email", user.email).single().execute()
+    # --------------------------------------------------------
+    # DOCTOR LOGIN → GET doctor_id BY EMAIL
+    # --------------------------------------------------------
+    if role == "doctor":
+        try:
+            res = (
+                supabase_db.table("doctors")
+                .select("id")
+                .eq("email", user.email)
+                .single()
+                .execute()
+            )
+            doctor_id = res.data["id"]
+        except:
+            doctor_id = None
 
     return {
         "message": "Login successful",
         "role": role,
-        "user": {
-            "id": user.id,
-            "email": user.email,
-        },
-        "session": {
-            "access_token": session.access_token,
-            "refresh_token": session.refresh_token,
-            "expires_in": session.expires_in,
-        },
-        "profile": profile.data if profile else None
+        "patient_id": patient_id,
+        "doctor_id": doctor_id,
+        "email": user.email,
+        "name": (user.user_metadata or {}).get("name"),
+        "session": session
     }

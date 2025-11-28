@@ -1,4 +1,4 @@
-from app.core.supabase_clients import supabase_auth, supabase_db
+from app.core.supabase_client import supabase_auth, supabase_db
 import uuid
 from datetime import datetime
 
@@ -12,14 +12,14 @@ def save_chat_message(share_id: str, sender: str, message: str):
         "created_at": datetime.utcnow().isoformat()
     }
 
-    supabase.table("chat_messages").insert(data).execute()
+    supabase_db.table("chat_messages").insert(data).execute()
     return True
 
 
 # Fetch full chat history
 def get_chat_history(share_id: str):
     res = (
-        supabase.table("chat_messages")
+        supabase_db.table("chat_messages")
         .select("*")
         .eq("share_id", share_id)
         .order("created_at")

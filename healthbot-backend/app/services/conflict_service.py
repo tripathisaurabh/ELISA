@@ -1,7 +1,7 @@
 import json
 from app.core.openai_client import ask_gpt
 from app.services.share_service import validate_share_session
-from app.core.supabase_clients import supabase_auth, supabase_db
+from app.core.supabase_client import supabase_auth, supabase_db
 
 
 def extract_meds(text: str):
